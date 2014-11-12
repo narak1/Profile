@@ -3,6 +3,7 @@
 
 
 Tag::Tag(void)
+	: m_strName(_T(""))
 {
 }
 

@@ -5,6 +5,8 @@
 #pragma once
 #include "afxcmn.h"
 
+class Tag;
+class CServerSock;
 
 // CDummySimDlg dialog
 class CDummySimDlg : public CDialog
@@ -41,4 +43,11 @@ public:
 	CListCtrl m_TagList;
 	void ProfileLoad(void);
 	void ProfileSave(void);
+	Tag** m_ppTag;
+	int m_nTag;
+	afx_msg void OnBnClickedBtnStart();
+private:
+	CServerSock* m_pListenSock;
+public:
+	afx_msg void OnBnClickedOk();
 };

@@ -7,6 +7,8 @@
 #include "DummySimDlg.h"
 #include "afxdialogex.h"
 
+#include "ServerSock.h"
+
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -20,6 +22,9 @@
 CDummySimDlg::CDummySimDlg(CWnd* pParent /*=NULL*/)
 	: CDialog(CDummySimDlg::IDD, pParent)
 	, m_pLogFile(NULL)
+	, m_ppTag(NULL)
+	, m_nTag(0)
+	, m_pListenSock(NULL)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 	m_nSvcPort = 0;
@@ -39,6 +44,8 @@ void CDummySimDlg::DoDataExchange(CDataExchange* pDX)
 BEGIN_MESSAGE_MAP(CDummySimDlg, CDialog)
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
+	ON_BN_CLICKED(IDC_BTN_START, &CDummySimDlg::OnBnClickedBtnStart)
+	ON_BN_CLICKED(IDOK, &CDummySimDlg::OnBnClickedOk)
 END_MESSAGE_MAP()
 
 
@@ -54,14 +61,14 @@ BOOL CDummySimDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// Set small icon
 
 	// TODO: Add extra initialization here
-	char date_time[32];
-	time_t t = time(NULL);
-	struct tm *tp = localtime(&t);
-	strftime(date_time, 32, "%Y-%m-%d_%H%M%S.txt", tp);
+	SYSTEMTIME lt;
+	::GetLocalTime(&lt);
+	CString strDateTime;
+	strDateTime.Format("%4d-%02d-%02d_%02d%02d%02d.txt", lt.wYear, lt.wMonth, lt.wDay, lt.wHour, lt.wMinute, lt.wSecond);
 
 	this->m_pLogFile = new CStdioFile();
 	UINT nFlag = CFile::modeWrite | CFile::modeCreate | CFile::modeNoTruncate | CFile::typeText | CFile::shareDenyNone;
-	BOOL flag = this->m_pLogFile->Open(date_time, nFlag);
+	BOOL flag = this->m_pLogFile->Open(strDateTime, nFlag);
 	if( flag == FALSE ) {
 		delete this->m_pLogFile;
 		this->m_pLogFile = NULL;
@@ -78,15 +85,8 @@ BOOL CDummySimDlg::OnInitDialog()
 	this->m_TagList.InsertColumn(2, "B.C. Value", LVCFMT_LEFT, 50);
 	this->m_TagList.InsertColumn(3, "Calc Value", LVCFMT_LEFT, 50);
 
-	for( int i=0 ; i<this->m_RuleMap.GetNum() ; i++ )
-	{
-		int idx = this->m_TagList.InsertItem(this->m_TagList.GetItemCount(),
-												CWorkThread::GetCatName(this->m_RuleMap.GetCat(i)));
-		this->m_TagList.SetItemText(idx, 1, this->m_RuleMap.GetOrg(i));
-		this->m_TagList.SetItemText(idx, 2, this->m_RuleMap.GetNew(i));
-	}
-
-	this->m_TagList.SetExtendedStyle( this->m_TagList.GetExtendedStyle() | LVS_EX_FULLROWSELECT );
+	this->m_TagList.SetExtendedStyle( this->m_TagList.GetExtendedStyle()
+								| LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
 
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
@@ -190,4 +190,50 @@ void CDummySimDlg::ProfileLoad(void)
 void CDummySimDlg::ProfileSave(void)
 {
 	theApp.WriteProfileInt(strSection, strPort, this->m_nSvcPort);
+}
+
+
+void CDummySimDlg::OnBnClickedBtnStart()
+{
+	if( this->m_pListenSock != NULL ) {
+		return;
+	}
+
+	this->UpdateData();
+	this->ProfileSave();
+	this->PrintOut("Starting.. Port=%d", this->m_nSvcPort);
+
+	CServerSock *pSock = new CServerSock(this);
+
+	BOOL flag = pSock->Create(this->m_nSvcPort);
+	if( flag == 0 ) {
+		DWORD dwError = ::GetLastError();
+		this->PrintOut("Socket Create(%d) Error! ErrorNo=%08X", this->m_nSvcPort, dwError);
+		delete pSock;
+		return;
+	}
+
+	flag = pSock->Listen();
+	if( flag == 0 ) {
+		DWORD dwError = ::GetLastError();
+		this->PrintOut("Socket Listen() Error! ErrorNo=%08X", dwError);
+		delete pSock;
+		return;
+	}
+
+	this->m_pListenSock = pSock;
+	this->PrintOut("Listening.. Port=%d", this->m_nSvcPort);
+}
+
+
+void CDummySimDlg::OnBnClickedOk()
+{
+	// TODO: Add your control notification handler code here
+	if( this->m_pListenSock != NULL ) {
+		delete this->m_pListenSock;
+	}
+	this->m_pLogFile->Close();
+	delete this->m_pLogFile;
+
+	CDialog::OnOK();
 }

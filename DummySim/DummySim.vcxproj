@@ -102,6 +102,7 @@
     <ClInclude Include="DummySim.h" />
     <ClInclude Include="DummySimDlg.h" />
     <ClInclude Include="Resource.h" />
+    <ClInclude Include="ServerSock.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="Tag.h" />
     <ClInclude Include="targetver.h" />
@@ -109,6 +110,7 @@
   <ItemGroup>
     <ClCompile Include="DummySim.cpp" />
     <ClCompile Include="DummySimDlg.cpp" />
+    <ClCompile Include="ServerSock.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
@@ -117,6 +119,14 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="DummySim.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Logger\Logger.vcxproj">
+      <Project>{73a81008-b343-43c9-8321-43891e3bc034}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\Packet\Packet.vcxproj">
+      <Project>{a4ba566b-204c-42c5-a598-896230bec586}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
