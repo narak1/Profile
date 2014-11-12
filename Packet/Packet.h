@@ -1,0 +1,41 @@
+#pragma once
+
+class Argument;
+class ErrorCode;
+
+class Packet
+{
+public:
+	Packet(void);
+	~Packet(void);
+	static const int HDR_STX = 4;
+	static const int HDR_CMD = 8;
+	static const int HDR_LEN = 4;
+	static const int HDR_SIZE = (HDR_STX + HDR_CMD + HDR_LEN);
+	enum RequestType { Undef, ForSend='S', ForResponse='R', SendOnly='O', };
+protected:
+	int m_nRecvNum;
+	int m_nSendNum;
+	char* m_pRecvBuf;
+	char* m_pSendBuf;
+public:
+	void AddRecv(const char* pBuf, int nLen);
+	void SubSend(int nLen);
+	const char* GetSend(int& nData);
+protected:
+	int m_nRBufSize;
+	int m_nSBufSize;
+public:
+	ErrorCode Parse(void);
+private:
+	char* FindSTX(void);
+protected:
+	int m_nReqType;
+	const char* m_pCmd;
+	int m_nLen;
+	int m_nArg;
+	Argument* m_pArg;
+public:
+	Argument* GetArg(int& nArg);
+};
+
