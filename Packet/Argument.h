@@ -11,6 +11,12 @@ private:
 	int m_nLen;
 	void* m_pValue;
 public:
-	int set(int nType, int nLen, const char* pBuf);
+	int set(int nType, int nLen, const char* pBuf=NULL);
+
+	int get_size(void)
+	{
+		return m_nLen * Argument::DataSize[m_nType];
+	}
+	char* encode(char* ptr);
 };
 

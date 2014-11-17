@@ -10,8 +10,9 @@ public:
 	enum ModuleType { NoModule, Packet, Socket };
 private:
 	int m_nCode;
+	const char* m_pStr;
 public:
-	ErrorCode set(bool bError, int nModule, int nCode);
+	ErrorCode set(bool bError, int nModule, int nCode, const char* pStr=NULL);
 
 	int is_clean(void)
 	{
@@ -32,4 +33,6 @@ public:
 	{
 		return (abs(this->m_nCode) & 0xFFFF);
 	}
+
+	const char* get_error() { return this->m_pStr; };
 };

@@ -12,7 +12,7 @@ public:
 	static const int HDR_CMD = 8;
 	static const int HDR_LEN = 4;
 	static const int HDR_SIZE = (HDR_STX + HDR_CMD + HDR_LEN);
-	enum RequestType { Undef, ForSend='S', ForResponse='R', SendOnly='O', };
+	enum RequestType { ForSend='S', ForResponse='R', SendOnly='O', };
 protected:
 	int m_nRecvNum;
 	int m_nSendNum;
@@ -37,5 +37,12 @@ protected:
 	Argument* m_pArg;
 public:
 	Argument* GetArg(int& nArg);
+	void Clear(bool bSend=false);
+	void AddArg(const char* pStr);
+	void SetArgNum(int nNum);
+	void Encode(void);
+	void AddArg(void);
+	int GetRequestType() { return this->m_nReqType; };
+	void SetRequestType(int nType) { this->m_nReqType = nType; };
 };
 

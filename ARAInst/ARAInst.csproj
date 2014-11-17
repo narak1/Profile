@@ -34,7 +34,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="ListViewEx">
-      <HintPath>..\ListViewEx.dll</HintPath>
+      <HintPath>..\ListViewEx\ListViewEx.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />

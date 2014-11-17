@@ -25,3 +25,17 @@ int Argument::set(int nType, int nLen, const char* pBuf)
 	this->m_pValue = (void *)pBuf;
 	return nLen * Argument::DataSize[nType];
 }
+
+
+char* Argument::encode(char* ptr)
+{
+	* (short *) ptr = this->m_nType;
+	ptr += 2;
+
+	* (short *) ptr = this->m_nLen;
+	ptr += 2;
+
+	memcpy(ptr, this->m_pValue, this->m_nLen);
+
+	return ptr + ((this->m_nLen + 3) / 4) * 4;
+}

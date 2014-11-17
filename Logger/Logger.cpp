@@ -63,6 +63,7 @@ bool Logger::Init(const char *file_name)
 		return false;
 	}
 
+	bool bFlag;
 	char path_name[1024];
 	strcpy(path_name, this->m_Path);
 	strcat(path_name, "\\");
@@ -74,12 +75,14 @@ bool Logger::Init(const char *file_name)
 	if( flag == FALSE ) {
 		delete this->m_File;
 		this->m_File = NULL;
+		bFlag = false;
 	}
 	else {
 		this->m_File->SeekToEnd();
+		bFlag = true;
 	}
 
-	return flag;
+	return bFlag;
 }
 
 void Logger::Init(FILE* fp)
@@ -187,6 +190,8 @@ void Logger::PrintDump(const void *data, int size, int width, int base_pos)
 
 		m_File->WriteString(line + m_NewLine);
 	}
+
+	m_File->Flush();
 }
 
 

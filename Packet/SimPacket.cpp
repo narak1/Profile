@@ -2,12 +2,12 @@
 #include "SimPacket.h"
 #include "ErrorCode.h"
 
-//	enum Command { Add, Del, Read, Write, Save, Load, Remove, NoCmd };
-const char* SimPacket::m_strCmd[] = { "Add", "Del", "Read", "Write", "Save", "Load", "Remove", "" };
+//	enum Command { Add, Del, Read, Write, Save, Load, Remove, Error, NoCmd };
+const char* SimPacket::m_strCmd[] = { "Add", "Del", "Read", "Write", "Save", "Load", "Remove", "Error", "" };
 
 
 SimPacket::SimPacket(void)
-	: m_nCmd(0)
+	: m_nCmd(NoCmd)
 {
 }
 
@@ -25,7 +25,7 @@ ErrorCode SimPacket::Parse(void)
 	}
 
 	// find command
-	for( int i=0 ; i<this->NoCmd ; i++ ) {
+	for( int i=0 ; i<=this->Error ; i++ ) {
 		if( strcmp(this->m_pCmd, this->m_strCmd[i]) == 0 ) {
 			this->m_nCmd = i;
 			break;
@@ -37,4 +37,11 @@ ErrorCode SimPacket::Parse(void)
 	}
 
 	return ec;
+}
+
+
+void SimPacket::Encode(void)
+{
+	this->m_pCmd = this->m_strCmd[this->m_nCmd];
+	Packet::Encode();
 }
