@@ -50,4 +50,6 @@ private:
 	CServerSock* m_pListenSock;
 public:
 	afx_msg void OnBnClickedOk();
+	void StartService(void);
+	afx_msg void OnBnClickedBtnStop();
 };

@@ -30,8 +30,11 @@ Packet::~Packet(void)
 
 void Packet::AddRecv(const char* pBuf, int nLen)
 {
-	PRINTLOG(("AddRecv(pBuf=%p, nLen=%d)", pBuf, nLen));
-	PRINTLOG(("this->m_nRecvNum=%d, this->m_nRBufSize=%d", this->m_nRecvNum, this->m_nRBufSize));
+	PRINTLOG(("this=%p, AddRecv(pBuf=%p, nLen=%d)", this, pBuf, nLen));
+	PRINTDUMP(pBuf, nLen);
+	PRINTLOG(("this->m_nRecvNum=%d", this->m_nRecvNum));
+	PRINTLOG(("this->m_nRBufSize=%d", this->m_nRBufSize));
+//	PRINTLOG(("this->m_nRecvNum=%d, this->m_nRBufSize=%d", this->m_nRecvNum, this->m_nRBufSize));
 
 	if( this->m_nRecvNum + nLen > this->m_nRBufSize )
 	{

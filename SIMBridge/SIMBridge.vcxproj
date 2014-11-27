@@ -99,6 +99,7 @@
     <None Include="res\SIMBridge.rc2" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="PeerInfo.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="SIMBridge.h" />
     <ClInclude Include="SIMBridgeDlg.h" />
@@ -106,6 +107,7 @@
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="PeerInfo.cpp" />
     <ClCompile Include="SIMBridge.cpp" />
     <ClCompile Include="SIMBridgeDlg.cpp" />
     <ClCompile Include="stdafx.cpp">
@@ -116,7 +118,20 @@
   <ItemGroup>
     <ResourceCompile Include="SIMBridge.rc" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Logger\Logger.vcxproj">
+      <Project>{73a81008-b343-43c9-8321-43891e3bc034}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\Packet\Packet.vcxproj">
+      <Project>{a4ba566b-204c-42c5-a598-896230bec586}</Project>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
+  <ProjectExtensions>
+    <VisualStudio>
+      <UserProperties RESOURCE_FILE="SIMBridge.rc" />
+    </VisualStudio>
+  </ProjectExtensions>
 </Project>

@@ -8,6 +8,7 @@
 #include "afxdialogex.h"
 
 #include "ServerSock.h"
+#include "../Logger/Logger.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -46,6 +47,7 @@ BEGIN_MESSAGE_MAP(CDummySimDlg, CDialog)
 	ON_WM_QUERYDRAGICON()
 	ON_BN_CLICKED(IDC_BTN_START, &CDummySimDlg::OnBnClickedBtnStart)
 	ON_BN_CLICKED(IDOK, &CDummySimDlg::OnBnClickedOk)
+	ON_BN_CLICKED(IDC_BTN_STOP, &CDummySimDlg::OnBnClickedBtnStop)
 END_MESSAGE_MAP()
 
 
@@ -61,10 +63,12 @@ BOOL CDummySimDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// Set small icon
 
 	// TODO: Add extra initialization here
+	g_Logger.Init();
+
 	SYSTEMTIME lt;
 	::GetLocalTime(&lt);
 	CString strDateTime;
-	strDateTime.Format("%4d-%02d-%02d_%02d%02d%02d.txt", lt.wYear, lt.wMonth, lt.wDay, lt.wHour, lt.wMinute, lt.wSecond);
+	strDateTime.Format("DummySim_%4d-%02d-%02d.log", lt.wYear, lt.wMonth, lt.wDay);
 
 	this->m_pLogFile = new CStdioFile();
 	UINT nFlag = CFile::modeWrite | CFile::modeCreate | CFile::modeNoTruncate | CFile::typeText | CFile::shareDenyNone;
@@ -81,12 +85,16 @@ BOOL CDummySimDlg::OnInitDialog()
 	this->UpdateData(FALSE);
 
 	this->m_TagList.InsertColumn(0, "Tag Name", LVCFMT_LEFT, 200);
-	this->m_TagList.InsertColumn(1, "Var Type", LVCFMT_LEFT, 50);
-	this->m_TagList.InsertColumn(2, "B.C. Value", LVCFMT_LEFT, 50);
-	this->m_TagList.InsertColumn(3, "Calc Value", LVCFMT_LEFT, 50);
+	this->m_TagList.InsertColumn(1, "Var Type", LVCFMT_LEFT, 100);
+	this->m_TagList.InsertColumn(2, "B.C. Value", LVCFMT_LEFT, 100);
+	this->m_TagList.InsertColumn(3, "Calc Value", LVCFMT_LEFT, 100);
 
 	this->m_TagList.SetExtendedStyle( this->m_TagList.GetExtendedStyle()
 								| LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
+
+	if( this->m_nSvcPort > 0 ) {
+		this->StartService();
+	}
 
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
@@ -201,6 +209,12 @@ void CDummySimDlg::OnBnClickedBtnStart()
 
 	this->UpdateData();
 	this->ProfileSave();
+	this->StartService();
+}
+
+
+void CDummySimDlg::StartService(void)
+{
 	this->PrintOut("Starting.. Port=%d", this->m_nSvcPort);
 
 	CServerSock *pSock = new CServerSock(this);
@@ -230,10 +244,23 @@ void CDummySimDlg::OnBnClickedOk()
 {
 	// TODO: Add your control notification handler code here
 	if( this->m_pListenSock != NULL ) {
+		this->m_pListenSock->Close();
 		delete this->m_pListenSock;
+		this->PrintOut("Stopped.. Port=%d", this->m_nSvcPort);
 	}
 	this->m_pLogFile->Close();
 	delete this->m_pLogFile;
 
 	CDialog::OnOK();
+}
+
+
+void CDummySimDlg::OnBnClickedBtnStop()
+{
+	if( this->m_pListenSock != NULL ) {
+		this->m_pListenSock->Close();
+		delete this->m_pListenSock;
+		this->m_pListenSock = NULL;
+		this->PrintOut("Stopped.. Port=%d", this->m_nSvcPort);
+	}
 }

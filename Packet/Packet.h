@@ -44,5 +44,6 @@ public:
 	void AddArg(void);
 	int GetRequestType() { return this->m_nReqType; };
 	void SetRequestType(int nType) { this->m_nReqType = nType; };
+	void SetCommand(const char* pCmd) { this->m_pCmd = pCmd; };
 };
 

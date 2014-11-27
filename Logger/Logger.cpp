@@ -2,6 +2,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 #include <afx.h>
+#include <afxmt.h>
 #include "Logger.h"
 
 #pragma warning(disable : 4996)
@@ -12,33 +13,12 @@
 
 static CString m_NewLine = "\n";
 
-Logger g_Logger(true);
+Logger g_Logger;
 
-Logger::Logger(bool flag)
+Logger::Logger()
 	: m_Path(NULL)
 {
-	if( flag )
-	{
-		SYSTEMTIME sysTime;
-		::GetLocalTime(&sysTime);
-		CString strFileName;
-		strFileName.Format("Log_%4d-%02d-%02d_%02d%02d%02d.txt",
-			sysTime.wYear, sysTime.wMonth, sysTime.wDay, sysTime.wHour, sysTime.wMinute, sysTime.wSecond);
-
-		this->m_File = new CStdioFile();
-		UINT openFlag = CFile::modeCreate | CFile::modeNoTruncate | CFile::modeWrite | CFile::shareDenyNone | CFile::typeText;
-		BOOL flag = m_File->Open(strFileName, openFlag);
-		if( flag == FALSE ) {
-			delete this->m_File;
-			this->m_File = NULL;
-		}
-		else {
-			this->m_File->SeekToEnd();
-		}
-	}
-	else {
-		this->m_File = NULL;
-	}
+	this->m_CS = new CCriticalSection;
 }
 
 Logger::~Logger()
@@ -48,6 +28,8 @@ Logger::~Logger()
 		m_File->Close();
 		delete m_File;
 	}
+
+	delete this->m_CS;
 }
 
 bool Logger::Init(const char *file_name)
@@ -58,17 +40,27 @@ bool Logger::Init(const char *file_name)
 		delete m_File;
 	}
 
-	if( (file_name == NULL) || (file_name[0] == 0) ) {
-		this->m_File = NULL;
-		return false;
+	CString strFileName;
+	if( (file_name == NULL) || (file_name[0] == 0) )
+	{
+		SYSTEMTIME sysTime;
+		::GetLocalTime(&sysTime);
+		strFileName.Format("Log_%4d-%02d-%02d_%02d%02d%02d.txt",
+			sysTime.wYear, sysTime.wMonth, sysTime.wDay, sysTime.wHour, sysTime.wMinute, sysTime.wSecond);
+		file_name = strFileName;
+	}
+
+	char path_name[1024];
+	if( this->m_Path != NULL ) {
+		strcpy(path_name, this->m_Path);
+		strcat(path_name, "\\");
+		strcat(path_name, file_name);
+	}
+	else {
+		strcpy(path_name, file_name);
 	}
 
 	bool bFlag;
-	char path_name[1024];
-	strcpy(path_name, this->m_Path);
-	strcat(path_name, "\\");
-	strcat(path_name, file_name);
-
 	this->m_File = new CStdioFile();
 	UINT openFlag = CFile::modeCreate | CFile::modeNoTruncate | CFile::modeWrite | CFile::shareDenyNone | CFile::typeText;
 	BOOL flag = m_File->Open(path_name, openFlag);
@@ -117,26 +109,23 @@ void Logger::PrintLogV(const char* fmt, va_list arg)
 		return;
 
 	char buf[BUFSIZ];
-
 	SYSTEMTIME sysTime;
 	GetLocalTime(&sysTime);
 	sprintf(buf, "[%04d-%02d-%02d %02d:%02d:%02d] ",
 		sysTime.wYear, sysTime.wMonth, sysTime.wDay,
 		sysTime.wHour, sysTime.wMinute, sysTime.wSecond);
+	vsprintf(buf+strlen(buf), fmt, arg);
+	strcat(buf, m_NewLine);
+
 	m_File->WriteString(buf);
-
-	vsprintf(buf, fmt, arg );
-	m_File->WriteString(buf);
-
-	int len = strlen(fmt);
-	if( (len == 0) || (fmt[len-1] != m_NewLine.GetAt(0)) )
-		m_File->WriteString(m_NewLine);
-
 	m_File->Flush();
 }
 
 void Logger::PrintLog(const char *fmt, ...)
 {
+	if( this->m_File == NULL )
+		return;
+
 	va_list arg;
 	va_start( arg, fmt );
 	this->PrintLogV(fmt, arg);
@@ -203,5 +192,6 @@ void Logger::SetDir(const char* strPath)
 
 void Logger::Flush(void)
 {
-	this->m_File->Flush();
+	if( this->m_File != NULL )
+		this->m_File->Flush();
 }
