@@ -5,7 +5,8 @@
 #pragma once
 
 class Util;
-class PeerInfo;
+class CMySock;
+class SocketManager;
 
 
 // CSIMBridgeDlg dialog
@@ -40,31 +41,28 @@ public:
 	void ProfileSave(void);
 	void StartService(void);
 	void StopService(void);
-private:
-	SOCKET m_ListenSock;
-	HANDLE m_IOCP;
-public:
 	void Init(void);
 	CString m_strOutput;
 	CEdit m_Output;
-	void PrintError(const char* fmt, ...);
+	void PrintInfo(const char* fmt, ...);
+	void PrintOut(const char* fmt, ...);
 private:
-	static const int MaxThread = 64;
-	int m_nThread;
-	HANDLE m_hThread[MaxThread];
-	HANDLE m_hListenThread;
 	Util* m_Util;
 	virtual void OnOK();
 	bool m_bRun;
 public:
 	CButton m_BtnStart;
-	void ListenFunction(void);
-	void WorkFunction(void);
-private:
-	static const int MaxPeerInfo = 256;
-	int m_nPeerInfo;
-	PeerInfo* m_pPeerInfo[MaxPeerInfo];
-	static const int SockBuffSize = 512;
-public:
 	afx_msg void OnBnClickedOk();
+private:
+	CMySock* m_pListenSock;
+	SocketManager* m_SockMgr;
+public:
+	SocketManager* GetSocketManager() { return m_SockMgr; };
+	int m_nPriority;
+	CString m_strServerType;
 };
+
+extern CSIMBridgeDlg *g_pDlg;
+
+#define PRINTINFO(a) g_pDlg->PrintInfo a
+#define PRINTOUT(a) g_pDlg->PrintOut a

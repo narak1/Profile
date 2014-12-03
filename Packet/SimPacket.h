@@ -8,11 +8,5 @@ public:
 	SimPacket(void);
 	~SimPacket(void);
 	ErrorCode Parse(void);
-private:
-	int m_nCmd;
-public:
-	int GetCommand() { return this->m_nCmd; };
-	void SetCommand(int nCmd) { this->m_nCmd = nCmd; };
-void Encode(void);
+	void Encode(void);
 };
-

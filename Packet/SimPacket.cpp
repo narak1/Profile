@@ -7,7 +7,6 @@ const char* SimPacket::m_strCmd[] = { "Add", "Del", "Read", "Write", "Save", "Lo
 
 
 SimPacket::SimPacket(void)
-	: m_nCmd(NoCmd)
 {
 }
 

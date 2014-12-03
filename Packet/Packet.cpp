@@ -16,6 +16,7 @@ Packet::Packet(void)
 	, m_nSBufSize(0)
 	, m_nReqType(0)
 	, m_pCmd(NULL)
+	, m_nCmd(0)
 	, m_nLen(0)
 	, m_nArg(0)
 	, m_pArg(NULL)
@@ -30,11 +31,9 @@ Packet::~Packet(void)
 
 void Packet::AddRecv(const char* pBuf, int nLen)
 {
-	PRINTLOG(("this=%p, AddRecv(pBuf=%p, nLen=%d)", this, pBuf, nLen));
+	PRINTLOG((Logger::DebugLog, "this=%p, AddRecv(pBuf=%p, nLen=%d)", this, pBuf, nLen));
 	PRINTDUMP(pBuf, nLen);
-	PRINTLOG(("this->m_nRecvNum=%d", this->m_nRecvNum));
-	PRINTLOG(("this->m_nRBufSize=%d", this->m_nRBufSize));
-//	PRINTLOG(("this->m_nRecvNum=%d, this->m_nRBufSize=%d", this->m_nRecvNum, this->m_nRBufSize));
+	PRINTLOG((Logger::DebugLog, "this->m_nRecvNum=%d, this->m_nRBufSize=%d", this->m_nRecvNum, this->m_nRBufSize));
 
 	if( this->m_nRecvNum + nLen > this->m_nRBufSize )
 	{
@@ -51,7 +50,7 @@ void Packet::AddRecv(const char* pBuf, int nLen)
 
 void Packet::SubSend(int nLen)
 {
-PRINTLOG(("Packet::SubSend(nLen=%d)  vs this->m_nSendNum=%d", nLen, this->m_nSendNum));
+	PRINTLOG((Logger::DebugLog, "Packet::SubSend(nLen=%d)  vs this->m_nSendNum=%d", nLen, this->m_nSendNum));
 	this->m_nSendNum -= nLen;
 	::memcpy(this->m_pSendBuf, this->m_pSendBuf + nLen, this->m_nSendNum);
 }
@@ -66,22 +65,22 @@ const char* Packet::GetSend(int& nData)
 
 ErrorCode Packet::Parse(void)
 {
-	PRINTLOG(("Packet::Parse()"));
-	PRINTLOG(("RecvData (%d):", this->m_nRecvNum));
-	PRINTLOG(("RecvBuff (%p):", this->m_pRecvBuf));
+	PRINTLOG((Logger::DebugLog, "Packet::Parse()"));
+	PRINTLOG((Logger::DebugLog, "RecvData (%d):", this->m_nRecvNum));
+	PRINTLOG((Logger::DebugLog, "RecvBuff (%p):", this->m_pRecvBuf));
 	PRINTDUMP(this->m_pRecvBuf, this->m_nRecvNum);
-	PRINTLOG(("RecvData (%d):", this->m_nRecvNum));
+	PRINTLOG((Logger::DebugLog, "RecvData (%d):", this->m_nRecvNum));
 
 	ErrorCode ec;
 
 	if( this->m_nRecvNum < Packet::HDR_SIZE ) {
-		PRINTLOG(("Not complete header"));
+		PRINTLOG((Logger::DebugLog, "Not complete header"));
 		return ec.set(false, ErrorCode::Packet, 1);
 	}
 
 	char *ptr = this->FindSTX();
 	if( ptr == NULL ) {
-		PRINTLOG(("Not found STX!"));
+		PRINTLOG((Logger::DebugLog, "Not found STX!"));
 		return ec.set(true, ErrorCode::Packet, 2);
 	}
 	ptr += this->HDR_STX;
@@ -96,13 +95,13 @@ ErrorCode Packet::Parse(void)
 
 	// packet size check
 	if( this->m_nRecvNum <  this->m_nLen ) {
-		PRINTLOG(("Not complete packet"));
+		PRINTLOG((Logger::DebugLog, "Not complete packet"));
 		return ec.set(false, ErrorCode::Packet, 3);
 	}
 
 	int num = this->m_nLen - this->HDR_SIZE;	// packet body length
 
-PRINTLOG(("Packet Size=%d, Packet Body Length=%d", this->m_nLen, num));
+	PRINTLOG((Logger::DebugLog, "Packet Size=%d, Packet Body Length=%d", this->m_nLen, num));
 
 	// parse argement
 	int nArg = * (int *) ptr;
@@ -110,7 +109,7 @@ PRINTLOG(("Packet Size=%d, Packet Body Length=%d", this->m_nLen, num));
 	ptr += 4;
 	num -= 4;
 
-PRINTLOG(("nArg=%d", nArg));
+	PRINTLOG((Logger::DebugLog, "nArg=%d, num=%d", nArg, num));
 
 	for( int i=0 ; i<nArg ; i++ )
 	{
@@ -120,19 +119,22 @@ PRINTLOG(("nArg=%d", nArg));
 		short nLen = * (short *) ptr;
 		ptr += 2;
 		num -= 2;
-PRINTLOG(("i=%d: nType=%d, nLen=%d", i, nType, nLen));
+		PRINTLOG((Logger::DebugLog, "i=%d: nType=%d, nLen=%d, num=%d", i, nType, nLen, num));
 
 		int nSize = pArg[i].set(nType, nLen, ptr);
 		nSize = ((nSize + 3) / 4) * 4;				// make multiple of 4
 		ptr += nSize;
 		num -= nSize;
+
+		PRINTLOG((Logger::DebugLog, "nSize=%d, num=%d", nSize, num));
+
 		if( num < 0 ) {
 			ec.set(true, ErrorCode::Packet, 4);
 			break;
 		}
 	}
 
-PRINTLOG(("Parse() return code=%d", ec.get_code()));
+	PRINTLOG((Logger::DebugLog, "Parse() return code=%d", ec.get_code()));
 	if( ec.is_clean() ) {
 		this->m_nArg = nArg;
 		this->m_pArg = pArg;
@@ -224,7 +226,7 @@ void Packet::SetArgNum(int nNum)
 
 void Packet::Encode(void)
 {
-PRINTLOG(("Packet::Encode()"));
+	PRINTLOG((Logger::DebugLog, "Packet::Encode()"));
 
 	// calc send packet size
 	//
@@ -234,7 +236,7 @@ PRINTLOG(("Packet::Encode()"));
 		nLen += 2 + 2 + this->m_pArg[i].get_size();
 	}
 
-PRINTLOG(("this->m_nSBufSize=%d, nLen=%d", this->m_nSBufSize, nLen));
+	PRINTLOG((Logger::DebugLog, "this->m_nSBufSize=%d, nLen=%d", this->m_nSBufSize, nLen));
 
 	// mem alloc or not
 	if( this->m_nSBufSize < nLen ) {
@@ -244,7 +246,7 @@ PRINTLOG(("this->m_nSBufSize=%d, nLen=%d", this->m_nSBufSize, nLen));
 		this->m_nSBufSize = nLen;
 	}
 
-PRINTLOG(("Encoding Start..."));
+	PRINTLOG((Logger::DebugLog, "Encoding Start..."));
 
 	// encoding
 	//
@@ -264,7 +266,7 @@ PRINTLOG(("Encoding Start..."));
 	* (int *) ptr = nLen;
 	ptr += 4;
 
-PRINTLOG(("Encoding Body Start..."));
+	PRINTLOG((Logger::DebugLog, "Encoding Body Start..."));
 
 	//
 	// Body
@@ -277,7 +279,7 @@ PRINTLOG(("Encoding Body Start..."));
 
 	this->m_nSendNum = ptr - this->m_pSendBuf;
 
-	PRINTLOG(("Encoding Send Buffer (%d):", this->m_nSendNum));
+	PRINTLOG((Logger::DebugLog, "Encoding Send Buffer (%d):", this->m_nSendNum));
 	PRINTDUMP(this->m_pSendBuf, this->m_nSendNum);
 }
 

@@ -99,17 +99,19 @@
     <None Include="res\SIMBridge.rc2" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="PeerInfo.h" />
+    <ClInclude Include="MySock.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="SIMBridge.h" />
     <ClInclude Include="SIMBridgeDlg.h" />
+    <ClInclude Include="SocketManager.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="PeerInfo.cpp" />
+    <ClCompile Include="MySock.cpp" />
     <ClCompile Include="SIMBridge.cpp" />
     <ClCompile Include="SIMBridgeDlg.cpp" />
+    <ClCompile Include="SocketManager.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>

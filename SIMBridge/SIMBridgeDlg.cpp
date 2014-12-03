@@ -5,9 +5,8 @@
 #include "stdafx.h"
 #include "SIMBridge.h"
 #include "SIMBridgeDlg.h"
-#include "afxdialogex.h"
-
-#include "PeerInfo.h"
+#include "MySock.h"
+#include "SocketManager.h"
 
 #include "../Packet/InstPacket.h"
 #include "../Packet/SimPacket.h"
@@ -25,29 +24,24 @@
 
 // CSIMBridgeDlg dialog
 
-
+CSIMBridgeDlg *g_pDlg;
 
 
 CSIMBridgeDlg::CSIMBridgeDlg(CWnd* pParent /*=NULL*/)
 	: CDialog(CSIMBridgeDlg::IDD, pParent)
-	, m_nThread(0)
 	, m_Util(NULL)
 	, m_bRun(false)
-	, m_nPeerInfo(0)
+	, m_pListenSock(NULL)
+	, m_SockMgr(NULL)
 {
+	::g_pDlg = this;
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 	m_strHostname = _T("");
 	m_nServicePort = 0;
 	m_strSimTime = _T("");
-	m_ListenSock = INVALID_SOCKET;
-	m_IOCP = INVALID_HANDLE_VALUE;
 	m_strOutput = _T("");
-	for( int i=0 ; i<MaxThread ; i++ ) {
-		this->m_hThread[i] = INVALID_HANDLE_VALUE;
-	}
-	for( int i=0 ; i<MaxPeerInfo ; i++ ) {
-		this->m_pPeerInfo[i] = NULL;
-	}
+	m_nPriority = 0;
+	m_strServerType = _T("");
 }
 
 void CSIMBridgeDlg::DoDataExchange(CDataExchange* pDX)
@@ -55,10 +49,14 @@ void CSIMBridgeDlg::DoDataExchange(CDataExchange* pDX)
 	CDialog::DoDataExchange(pDX);
 	DDX_Text(pDX, IDC_HOSTNAME, m_strHostname);
 	DDX_Text(pDX, IDC_SERVICE_PORT, m_nServicePort);
+	DDV_MinMaxInt(pDX, m_nServicePort, 0, 65535);
 	DDX_Text(pDX, IDC_SIMULATION_TIME, m_strSimTime);
 	DDX_Text(pDX, IDC_OUTPUT, m_strOutput);
 	DDX_Control(pDX, IDC_OUTPUT, m_Output);
 	DDX_Control(pDX, IDC_BUTTON1, m_BtnStart);
+	DDX_Text(pDX, IDC_PRIORITY, m_nPriority);
+	DDV_MinMaxInt(pDX, m_nPriority, 0, 2147483647);
+	DDX_CBString(pDX, IDC_SERVER_TYPE, m_strServerType);
 }
 
 BEGIN_MESSAGE_MAP(CSIMBridgeDlg, CDialog)
@@ -81,15 +79,13 @@ BOOL CSIMBridgeDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// Set small icon
 
 	// TODO: Add extra initialization here
+	g_Logger.Init("SIMBridge_%Y-%m-%d.log");
+
 	this->m_Util = new Util();
 
 	SYSTEMTIME lt;
 	::GetLocalTime(&lt);
-	CString strLogFile;
-	strLogFile.Format("SIMBridge_%4d-%02d-%02d.log", lt.wYear, lt.wMonth, lt.wDay);
-
-	g_Logger.Init(strLogFile);
-	PRINTLOG(("Start... %02d:%02d:%02d.%d", lt.wHour, lt.wMinute, lt.wSecond, lt.wMilliseconds));
+	PRINTLOG((Logger::InfoLog, "Start... %02d:%02d:%02d.%d", lt.wHour, lt.wMinute, lt.wSecond, lt.wMilliseconds));
 
 	DWORD nSize = MAX_COMPUTERNAME_LENGTH;
 	BOOL flag = ::GetComputerNameA(this->m_strHostname.GetBuffer(MAX_COMPUTERNAME_LENGTH + 1), &nSize);
@@ -146,7 +142,7 @@ HCURSOR CSIMBridgeDlg::OnQueryDragIcon()
 }
 
 
-void CSIMBridgeDlg::PrintError(const char* fmt, ...)
+void CSIMBridgeDlg::PrintInfo(const char* fmt, ...)
 {
 	this->UpdateData();
 
@@ -156,7 +152,21 @@ void CSIMBridgeDlg::PrintError(const char* fmt, ...)
 	strTmp.FormatV(fmt, arg);
 	va_end( arg );
 
-	PRINTLOG(("%s", strTmp));
+	PRINTLOG((Logger::InfoLog, "%s", strTmp));
+}
+
+
+void CSIMBridgeDlg::PrintOut(const char* fmt, ...)
+{
+	this->UpdateData();
+
+	va_list arg;
+	va_start( arg, fmt );
+	CString strTmp;
+	strTmp.FormatV(fmt, arg);
+	va_end( arg );
+
+	PRINTLOG((Logger::ErrorLog, "%s", strTmp));
 
 	if( !this->m_strOutput.IsEmpty() ) 
 		this->m_strOutput += "\r\n";
@@ -170,18 +180,24 @@ void CSIMBridgeDlg::PrintError(const char* fmt, ...)
 static CString strSection = "Config";
 static CString strHost = "Host";
 static CString strPort = "Port";
+static CString strType = "Type";
+static CString strPrio = "Prio";
 
 void CSIMBridgeDlg::ProfileLoad(void)
 {
 	this->m_strHostname = theApp.GetProfileStringA(strSection, strHost, this->m_strHostname);
 	this->m_nServicePort = theApp.GetProfileIntA(strSection, strPort, this->m_nServicePort);
+	this->m_strServerType = theApp.GetProfileStringA(strSection, strType, this->m_strServerType);
+	this->m_nPriority = theApp.GetProfileIntA(strSection, strPrio, this->m_nPriority);
 }
 
 
 void CSIMBridgeDlg::ProfileSave(void)
 {
-	theApp.WriteProfileString(strSection, strPort, this->m_strHostname);
+	theApp.WriteProfileString(strSection, strHost, this->m_strHostname);
 	theApp.WriteProfileInt(strSection, strPort, this->m_nServicePort);
+	theApp.WriteProfileString(strSection, strType, this->m_strServerType);
+	theApp.WriteProfileInt(strSection, strPrio, this->m_nPriority);
 }
 
 
@@ -204,327 +220,58 @@ void CSIMBridgeDlg::OnBnClickedButton1()
 
 void CSIMBridgeDlg::StartService(void)
 {
-	UINT WINAPI ListenFunction( LPVOID pArg );
-	PRINTLOG(("Starting.. Port=%d", this->m_nServicePort));
+	PRINTLOG((Logger::InfoLog, "Starting.. Port=%d", this->m_nServicePort));
 
-	// Listen Thread...
-	DWORD dwThreadID;
-	this->m_hListenThread = (HANDLE) _beginthreadex( NULL, 0, ListenFunction, this, 0, (unsigned *)&dwThreadID );
-	if( this->m_hListenThread == NULL ) {
-		this->PrintError("_beginthreadex() errno=%d:%s", errno, strerror(errno));
+	CMySock *pSock = new CMySock(this);
+
+	BOOL flag = pSock->Create(this->m_nServicePort);
+	if( flag == 0 ) {
+		DWORD dwError = ::GetLastError();
+		this->PrintOut("Socket Create(%d) Error! ErrorNo=%08X", this->m_nServicePort, dwError);
+		delete pSock;
 		return;
 	}
-	PRINTLOG(("Thread Created: ID=%d, Handle=%p", dwThreadID, this->m_hListenThread));
+
+	flag = pSock->Listen();
+	if( flag == 0 ) {
+		DWORD dwError = ::GetLastError();
+		this->PrintOut("Socket Listen() Error! ErrorNo=%08X", dwError);
+		delete pSock;
+		return;
+	}
+
+	this->m_pListenSock = pSock;
+	this->PrintOut("Listening.. Port=%d", this->m_nServicePort);
 }
 
 
 void CSIMBridgeDlg::StopService(void)
 {
-	Util util;
+	PRINTLOG((Logger::InfoLog, "Stopping.. Port=%d", this->m_nServicePort));
 
-	PRINTLOG(("Stopping.. Port=%d", this->m_nServicePort));
-
-	// listen socket is local connection need. because blocked at accept()
-
-	// recieve socket is ??? how can do ?
-	// Work Thread Finishing
-	//
-	DWORD dwSize = 0;
-	LPOVERLAPPED lpOverlapped = NULL;
-	for( int i=0 ; i<this->m_nThread ; i++ ) {
-		BOOL flag = PostQueuedCompletionStatus(this->m_IOCP, dwSize, NULL, NULL);
-		if( flag == FALSE ) {
-			DWORD dwError = ::GetLastError();
-			PRINTLOG(("PostQueuedCompletionStatus(,,,) Error! ErrorNo=%08X:%s", dwError, util.error_str(dwError)));
-		}
+	if( this->m_pListenSock != NULL ) {
+		this->m_pListenSock->Close();
+		delete this->m_pListenSock;
+		this->PrintOut("Stopped.. Port=%d", this->m_nServicePort);
 	}
-}
-
-
-UINT WINAPI ListenFunction( LPVOID pArg )
-{
-	PRINTLOG(("Listen Thread Running: ID=%d", GetCurrentThreadId()));
-
-	CSIMBridgeDlg *pDlg = (CSIMBridgeDlg *) pArg;
-	pDlg->ListenFunction();
-
-	PRINTLOG(("Listen Thread Finished: ID=%d", GetCurrentThreadId()));
-	_endthreadex( 0 );
-	return 0;
-}
-
-
-UINT WINAPI WorkFunction( LPVOID pArg )
-{
-	PRINTLOG(("Work Thread Running: ID=%d", GetCurrentThreadId()));
-
-	CSIMBridgeDlg *pDlg = (CSIMBridgeDlg *) pArg;
-	pDlg->WorkFunction();
-
-	PRINTLOG(("Work Thread Finished: ID=%d", GetCurrentThreadId()));
-	_endthreadex( 0 );
-	return 0;
 }
 
 
 void CSIMBridgeDlg::Init(void)
 {
-	UINT WINAPI WorkFunction( LPVOID pCompletionPortIO );
-
-	this->m_IOCP = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
-	if( this->m_IOCP == NULL ) {
-		DWORD dwError = ::GetLastError();
-		this->PrintError("CreateIoCompletionPort() Error=%08X:%s", dwError, this->m_Util->error_str(dwError));
-		return;
-	}
-	PRINTLOG(("CreateIoCompletionPort()=%p", this->m_IOCP));
-
-	SYSTEM_INFO systemInfo;
-	GetSystemInfo( &systemInfo );
-
-	this->m_nThread = 3;// systemInfo.dwNumberOfProcessors + 5;		// process num + alpha
-	if( this->m_nThread >= this->MaxThread )
-		this->m_nThread = this->MaxThread;
-	PRINTLOG(("NumberOfProcessors=%d, Thread Num=%d", systemInfo.dwNumberOfProcessors, this->m_nThread));
-
-	for( int i=0 ; i<this->m_nThread ; i++ )					// index 0 use Listen Thread
-	{
-		DWORD dwThreadID;
-		this->m_hThread[i] = (HANDLE) _beginthreadex( NULL, 0, WorkFunction, this, 0, (unsigned *)&dwThreadID );
-		if( this->m_hThread[i] == NULL ) {
-			this->PrintError("_beginthreadex() errno=%d:%s", errno, strerror(errno));
-			return;
-		}
-		PRINTLOG(("Thread Created: ID=%d, Handle=%p", dwThreadID, this->m_hThread[i]));
-	}
-}
-
-
-void CSIMBridgeDlg::ListenFunction(void)
-{
-	Util util;
-
-	SOCKET sock = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, WSA_FLAG_OVERLAPPED);
-	if (sock == INVALID_SOCKET) {
-		int nError = ::WSAGetLastError();
-		PRINTLOG(("Overlapped WSASocket() Error! WSAErrorNo=%d:%s", nError, util.wsa_error_str(nError)));
-		return;
-	}
-
-	SOCKADDR_IN addr;
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	addr.sin_port = htons(this->m_nServicePort);
-	int nRet = bind(sock, (SOCKADDR *)&addr, sizeof(addr));
-	if( nRet == SOCKET_ERROR ) {
-		int nError = ::WSAGetLastError();
-		PRINTLOG(("bind(PortNo=%d) Error! WSAErrorNo=%d:%s", this->m_nServicePort, nError, util.wsa_error_str(nError)));
-		closesocket(sock);
-		return;
-	}
-
-	nRet = listen(sock, SOMAXCONN);
-	if( nRet == SOCKET_ERROR ) {
-		int nError = ::WSAGetLastError();
-		PRINTLOG(("listen(,backlog=%x) Error! WSAErrorNo=%d:%s", SOMAXCONN, nError, util.wsa_error_str(nError)));
-		closesocket(sock);
-		return;
-	}
-
-	this->PrintError("Listening.. Port=%d", this->m_nServicePort);
-
-	// while loop --> thread need...
-	SOCKET client_sock;
-	int nSize = sizeof(addr);
-	while( 1 )
-	{
-		client_sock = accept(sock, (SOCKADDR *)&addr, &nSize);		// Blocking Position
-
-		PRINTLOG(("accept(%d,,)=%d ; Num of peer=%d", sock, client_sock, this->m_nPeerInfo));
-
-		if( this->m_bRun == false ) {	// Service Stoping....
-			break;
-		}
-
-		if( client_sock == INVALID_SOCKET ) {
-			int nError = ::WSAGetLastError();
-			PRINTLOG(("accept() Error! WSAErrorNo=%d:%s", sock, nError, util.wsa_error_str(nError)));
-			continue;
-		}
-
-		if( this->m_nPeerInfo == this->MaxPeerInfo ) {
-			PRINTLOG(("Too many peers. num=%d. skipped!", this->MaxPeerInfo));
-			continue;
-		}
-
-		PeerInfo *pi = new PeerInfo(client_sock);
-		pi->m_Packet = new Packet();					// Packet 이 어떤 클라이언트인지에 따라 처리되어야 함..
-		pi->m_wsaBuf.len = SockBuffSize;
-		pi->m_wsaBuf.buf = new CHAR [SockBuffSize];
-		SecureZeroMemory((PVOID)&(pi->m_wsaOverlapped), sizeof(WSAOVERLAPPED));
-PRINTLOG(("SecureZeroMemory(%p,%d) called", &(pi->m_wsaOverlapped), sizeof(WSAOVERLAPPED)));
-
-		this->m_pPeerInfo[this->m_nPeerInfo] = pi;
-		++this->m_nPeerInfo;
-
-		HANDLE hRet = CreateIoCompletionPort((HANDLE)client_sock, this->m_IOCP, (ULONG_PTR) pi, INFINITE);
-		if( hRet == NULL ) {
-			DWORD dwError = ::GetLastError();
-			PRINTLOG(("CreateIoCompletionPort(,,,) Error! ErrorNo=%08X:%s", dwError, util.error_str(dwError)));
-			continue;
-		}
-PRINTLOG(("CreateIoCompletionPort(%d,%p,%p,INFINITE)=%p called", client_sock, this->m_IOCP, pi, hRet));
-
-		// initial WSARecv call need
-		char buf[BUFSIZ];
-		WSABUF wsaBuf[1];
-		wsaBuf[0].buf = buf;
-		wsaBuf[0].len = BUFSIZ;
-		DWORD dwRecv = 0;
-		DWORD dwFlag = 0;
-		WSAOVERLAPPED wsaOverlapped;
-		SecureZeroMemory(&wsaOverlapped, sizeof(WSAOVERLAPPED));
-PRINTLOG(("dwRecv=%u, dwFlag=%u", dwRecv, dwFlag));
-PRINTLOG(("calling WSARecv(%d,%p,1,,,%p,NULL)", client_sock, &(pi->m_wsaBuf), &(pi->m_wsaOverlapped)));
-		nRet = WSARecv(client_sock, &(pi->m_wsaBuf), 1, &dwRecv, &dwFlag, &(pi->m_wsaOverlapped), NULL);
-//PRINTLOG(("calling WSARecv(%d,%p,1,,,%p,NULL)", client_sock, wsaBuf, &wsaOverlapped));
-		//nRet = WSARecv(client_sock, wsaBuf, 1, &dwRecv, &dwFlag, &wsaOverlapped, NULL);
-PRINTLOG(("WSARecv()=%d", nRet));
-		if( nRet == SOCKET_ERROR ) {
-			int nError = ::WSAGetLastError();
-			PRINTLOG(("WSARecv(%d,,,,) Error! WSAErrorNo=%d:%s", client_sock, nError, util.wsa_error_str(nError)));
-		}
-		else {
-			PRINTLOG(("WSARecv(client_sock=%d,buf,1,nRecv,flag,overlapped=%p", client_sock, &wsaOverlapped));
-			PRINTLOG(("dwRecv=%u, dwFlag=%u", dwRecv, dwFlag));
-		}
-	}
-
-	PRINTLOG(("Listen Thread Loop Finished"));
-
-	nRet = closesocket(client_sock);
-	if( nRet == SOCKET_ERROR ) {
-		int nError = ::WSAGetLastError();
-		PRINTLOG(("closesocket(%d) Error! WSAErrorNo=%d:%s", client_sock, nError, util.wsa_error_str(nError)));
-	}
-
-	nRet = closesocket(sock);
-	if( nRet == SOCKET_ERROR ) {
-		int nError = ::WSAGetLastError();
-		PRINTLOG(("closesocket(%d) Error! WSAErrorNo=%d:%s", sock, nError, util.wsa_error_str(nError)));
-	}
-}
-
-
-void CSIMBridgeDlg::WorkFunction(void)
-{
-	Util util;
-
-	while( 1 ) {
-		PRINTLOG(("Loop Start..."));
-
-		DWORD dwSize = 0;
-		ULONG_PTR lpPtr = NULL;
-		LPOVERLAPPED lpOverlapped = NULL;
-		BOOL flag = GetQueuedCompletionStatus(this->m_IOCP, &dwSize, &lpPtr, &lpOverlapped, INFINITE);	// Bolcking Position
-
-		PeerInfo *pi = (PeerInfo *) lpPtr;
-
-		PRINTLOG(("dwSize=%d, lpPtr=%p, lpOverlapped=%d, pi->overlapped=%p", dwSize, lpPtr, lpOverlapped, &(pi->m_wsaOverlapped)));
-PRINTDUMP(pi->m_wsaBuf.buf, dwSize);
-PRINTLOG(("DUmp DOne.."));
-
-		if( this->m_bRun == false ) {	// Service Stoping....
-			break;
-		}
-
-		if( flag == FALSE ) {
-			DWORD dwError = ::GetLastError();
-			this->PrintError("GetQueuedCompletionStatus() Error=%08X:%s", dwError, this->m_Util->error_str(dwError));
-			continue;
-		}
-
-		DWORD dwFlag = 0;
-		DWORD dwRecv = dwSize;
-		//rc = WSARecv(ConnSocket, &DataBuf, 1, &RecvBytes, &Flags, &RecvOverlapped, NULL);
-PRINTLOG(("calling WSARecv(%d,%p,1,,,%p,NULL)", pi->m_sock, &(pi->m_wsaBuf), &(pi->m_wsaOverlapped)));
-		int nRet = WSARecv(pi->m_sock, &(pi->m_wsaBuf), 1, &dwRecv, &dwFlag, &(pi->m_wsaOverlapped), NULL);
-PRINTLOG(("WSARecv()=%d", nRet));
-PRINTLOG(("dwRecv=%u, dwFlag=%u", dwRecv, dwFlag));
-		if( nRet == SOCKET_ERROR ) {
-			int nError = ::WSAGetLastError();
-			PRINTLOG(("WSARecv(%d,,,) Error! WSAErrorNo=%d:%s", pi->m_sock, nError, util.wsa_error_str(nError)));
-		}
-		else if( nRet == 0 ) {
-			// WSARecv returns zero. In this case, the completion routine will have already been scheduled
-			//  to be called once the calling thread is in the alertable state. 
-			PRINTLOG(("WSARecv(%d,,,)=0", pi->m_sock));
-			continue;
-		}
-PRINTDUMP(pi->m_wsaBuf.buf, dwRecv);
-PRINTLOG(("Dump Done.."));
-PRINTLOG(("pi->m_Packet=%p..pi->sock=%d", pi->m_Packet , pi->m_sock));
-
-		// Packet Processing
-		//
-		pi->m_Packet->AddRecv(pi->m_wsaBuf.buf, dwRecv);
-PRINTLOG(("pi->m_Packet->AddRecv(,%d)", dwRecv));
-
-		ErrorCode ec = pi->m_Packet->Parse();
-PRINTLOG(("pi->m_Packet->Parse()=%d", ec.get_code()));
-
-		if( ec.is_clean() ) {
-			pi->m_Packet->Clear();
-
-
-			pi->m_Packet->SetRequestType(Packet::ForResponse);
-			pi->m_Packet->SetCommand("good");
-			pi->m_Packet->SetArgNum(1);
-			pi->m_Packet->AddArg();	// None
-
-			pi->m_Packet->Encode();
-
-PRINTLOG(("this->m_Packet.Encode() Finish"));
-
-			// get send buffer
-			// send(buf, num);
-
-			int nData = 0;
-			const char *ptr = pi->m_Packet->GetSend(nData);
-			pi->m_wsaBuf.buf = (CHAR *) ptr;
-			pi->m_wsaBuf.len = nData;
-			nRet = WSASend(pi->m_sock, &pi->m_wsaBuf, 1, (LPDWORD) &nData, dwFlag, &pi->m_wsaOverlapped, NULL);
-			if( nRet == SOCKET_ERROR ) {
-				int nError = ::WSAGetLastError();
-				PRINTLOG(("WSASend(%,,,) Error! WSAErrorNo=%d:%s", pi->m_sock, nError, util.wsa_error_str(nError)));
-			}
-
-		}
-	}
-
-	PRINTLOG(("I/O Thread Loop Finished"));
+	this->m_SockMgr = new SocketManager();
 }
 
 
 void CSIMBridgeDlg::OnOK()
 {
-	PRINTLOG(("OnOK()"));
+	PRINTLOG((Logger::DebugLog, "OnOK()"));
 	this->StopService();
 
-	PRINTLOG(("Listen Thread Waiting...."));
-	::WaitForSingleObject( this->m_hListenThread, INFINITE );
-	::CloseHandle( this->m_hListenThread );
-
-	// close handle
-	for( int i=0 ; i<this->m_nThread ; i++ ) {
-		PRINTLOG(("%d Work Thread Waiting....", i));
-		::WaitForSingleObject( this->m_hThread[i], INFINITE );
-		::CloseHandle( this->m_hThread[i] );
-	}
-	::CloseHandle( this->m_IOCP );
-
 	delete this->m_Util;
-	PRINTLOG(("Finish OnOK()"));
+	PRINTLOG((Logger::DebugLog, "Finish OnOK()"));
+
+	g_Logger.Finish();
 
 	CDialog::OnOK();
 }
@@ -532,5 +279,6 @@ void CSIMBridgeDlg::OnOK()
 
 void CSIMBridgeDlg::OnBnClickedOk()
 {
+	PRINTLOG((Logger::DebugLog, "OnBnClickedOk()"));
 	this->OnOK();
 }

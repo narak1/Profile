@@ -32,6 +32,7 @@ private:
 protected:
 	int m_nReqType;
 	const char* m_pCmd;
+	int m_nCmd;
 	int m_nLen;
 	int m_nArg;
 	Argument* m_pArg;
@@ -45,5 +46,7 @@ public:
 	int GetRequestType() { return this->m_nReqType; };
 	void SetRequestType(int nType) { this->m_nReqType = nType; };
 	void SetCommand(const char* pCmd) { this->m_pCmd = pCmd; };
+	void SetCommand(int nCmd) { this->m_nCmd = nCmd; };
+	int GetCommand(void) { return this->m_nCmd; };
 };
 
