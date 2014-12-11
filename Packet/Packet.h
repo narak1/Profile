@@ -1,4 +1,5 @@
 #pragma once
+#include "memorymanager.h"
 
 class Argument;
 class ErrorCode;
@@ -48,5 +49,9 @@ public:
 	void SetCommand(const char* pCmd) { this->m_pCmd = pCmd; };
 	void SetCommand(int nCmd) { this->m_nCmd = nCmd; };
 	int GetCommand(void) { return this->m_nCmd; };
+	void AddArg(int nVal);
+	void AddArg(int* pVal);
+	void AddArg(int arrVal[], int num);
+private:
+	MemoryManager m_mm;
 };
-

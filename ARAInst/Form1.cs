@@ -21,6 +21,8 @@ namespace ARAInst
 		public ServerManager m_ServerMgr = new ServerManager();
 		public enum SubItemName { SeqNo, ServerType, NodeName, HostName, PortNo, Priority, Status };
 
+		public Protocol m_protocol = new Protocol();
+
 		public Form1()
 		{
 			InitializeComponent();
@@ -80,6 +82,7 @@ namespace ARAInst
 					this.PrintOut("Input Hostname!");
 					return;
 				}
+
 				string strPortno = this.textBox_ServicePort.Text;
 				if (strPortno.Length == 0)
 				{
@@ -90,11 +93,40 @@ namespace ARAInst
 				int portno = int.Parse(strPortno);
 				if (portno < 0 || portno > ushort.MaxValue)
 				{
-					this.PrintOut("Port No is between 0 to " + ushort.MaxValue + "!");
+					this.PrintOut("Port No is between 0 and " + ushort.MaxValue + "!");
 					return;
 				}
 
-				IPHostEntry ipHostInfo = Dns.GetHostEntry(hostname);
+				int priority = 0;
+				try
+				{
+					priority = int.Parse(this.textBox_ServerPriority.Text);
+				}
+				catch (Exception)
+				{
+				}
+
+				ServerInfo info = new ServerInfo();
+				info.server_type = this.comboBox_ServerType.Text;
+				info.node_name = this.textBox_NodeName.Text;
+				info.hostname = hostname;
+				info.port_no = portno;
+				info.priority = priority;
+
+				this.PrintOut("Add SIMBridge " + hostname + ":" + portno);
+				this.add_server(info);
+			}
+			catch (Exception ex)
+			{
+				this.PrintOut("Exception: " + ex.Message);
+			}
+		}
+
+		void add_server(ServerInfo info, bool dup_check_flag=true)
+		{
+			try
+			{
+				IPHostEntry ipHostInfo = Dns.GetHostEntry(info.hostname);
 				IPAddress ipAddress = null;
 				IPEndPoint remoteEP = null;
 
@@ -103,59 +135,43 @@ namespace ARAInst
 					if (ip.AddressFamily == AddressFamily.InterNetwork)
 					{
 						ipAddress = ip;
-						remoteEP = new IPEndPoint(ip, portno);
+						remoteEP = new IPEndPoint(ip, info.port_no);
 						break;
 					}
 				}
 
-				ServerInfo info = new ServerInfo();
-				info.server_type = this.comboBox_ServerType.Text;
-				info.node_name = this.textBox_NodeName.Text;
-				info.hostname = hostname;
-				info.port_no = portno;
 				info.end_point = remoteEP;
-				try
+
+				if (dup_check_flag)
 				{
-					info.priority = int.Parse(this.textBox_ServerPriority.Text);
-				}
-				catch (Exception)
-				{
-					info.priority = 0;
+					// Dup Check
+					if (this.m_ServerMgr.Add(info) == false)
+					{
+						this.PrintOut("Duplicated! Connection Info=" + info.end_point + ", Node Name=" + info.node_name);
+						return;
+					}
+
+					// Save System Config
+					this.m_ServerMgr.save();
 				}
 
-				// Dup Check
-				if (this.m_ServerMgr.Add(info) == false)
-				{
-					this.PrintOut("Duplicated! Connection Info=" + info.end_point + ", Node Name=" + info.node_name);
-					return;
-				}
-
-				this.PrintOut("Add SIMBridge " + hostname + ":" + strPortno);
-				this.PrintLog("Main Thread ID = " + Thread.CurrentThread.ManagedThreadId );
+				this.PrintLog("Main Thread ID = " + Thread.CurrentThread.ManagedThreadId);
 
 				ListViewItem lvi = this.listViewEx1.Items.Add(this.m_ServerMgr.Num().ToString());
 				lvi.SubItems.Add(info.server_type);
 				lvi.SubItems.Add(info.node_name);
-				lvi.SubItems.Add(hostname);
-				lvi.SubItems.Add(portno.ToString());
+				lvi.SubItems.Add(info.hostname);
+				lvi.SubItems.Add(info.port_no.ToString());
 				lvi.SubItems.Add(info.priority.ToString());
 				lvi.SubItems.Add("");
 				info.lvi = lvi;
-
-				// Save System Config
-				this.m_ServerMgr.save();
 
 				// Create a TCP/IP  socket.
 				Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 				info.sock = socket;
 				info.pack = new Packet();
 
-				//Create connected callback
-				AsyncCallback cbConnected = new AsyncCallback(Connected);
-
-				//Connect to host
-				socket.BeginConnect(remoteEP, cbConnected, info);
-				this.PrintOut("Connecting to " + info.end_point);
+				this.m_protocol.connect_start(info);
 			}
 			catch (SocketException se)
 			{
@@ -167,82 +183,35 @@ namespace ARAInst
 			}
 		}
 
-		void Connected(IAsyncResult ar)
+		private void button_open_Click(object sender, EventArgs e)
 		{
 			try
 			{
-				//Get socket reference
-				ServerInfo info = (ServerInfo)ar.AsyncState;
-				this.PrintOut("Connected to " + info.end_point + ", " + info.sock.Connected);
-				this.PrintLog("Callback Thread ID = " + Thread.CurrentThread.ManagedThreadId);
-
-				if (info.sock.Connected)
+				string last_path = this.load_registry_value();
+				OpenFileDialog lfd = new OpenFileDialog();
+				lfd.Filter = "XML file (*.xml)|*.xml|All files (*.*)|*.*";
+				lfd.FilterIndex = 1;
+				lfd.Title = "Open config file";
+				lfd.RestoreDirectory = true;
+				lfd.InitialDirectory = last_path;
+				lfd.Multiselect = false;
+				if (lfd.ShowDialog() != DialogResult.OK)
 				{
-					info.status = ServerInfo.ServerStatus.Connected;
-				}
-				else
-				{
-					info.status = ServerInfo.ServerStatus.Failed;
-				}
-
-				info.lvi.SubItems[(int)SubItemName.Status].Text = info.status.ToString();
-				if (info.sock.Connected == false)
 					return;
-
-				// send Hello
-				info.pack.arg_clear();
-				info.pack.set_cmd(Packet.Cmd.Hello);
-				info.pack.arg_add(info.node_name);
-				info.pack.arg_add(info.server_type);
-				info.pack.arg_add(info.priority);
-				byte[] sbuf = info.pack.encode();
-
-				string tmp = sbuf.Length.ToString() + ":";
-				for (int i = 0; i < sbuf.Length; i++)
-				{
-					tmp += " " + sbuf[i].ToString();
 				}
-				this.PrintLog(tmp);
 
-				int nRet = info.sock.Send(sbuf);
-				this.PrintLog("Sent Data: (" + nRet + ")");
-
-				byte[] rbuf = new byte[1024];
-				nRet = info.sock.Receive(rbuf);
-				this.PrintLog("Receive Data: (" + nRet + ")");
-
-				tmp = nRet.ToString() + ":";
-				for (int i = 0; i < nRet; i++)
-				{
-					tmp += " " + rbuf[i].ToString();
-				}
-				this.PrintLog(tmp);
-			}
-			catch (SocketException ex)
-			{
-				this.PrintOut("Socket Error: " + ex.Message);
-			}
-			catch (Exception ex)
-			{
-				this.PrintOut("Error: " + ex.Message);
-			}
-		}
-
-		private void button_open_Click(object sender, EventArgs e)
-		{
-			string last_path = this.load_registry_value();
-			OpenFileDialog lfd = new OpenFileDialog();
-			lfd.Filter = "XML file (*.xml)|*.xml|All files (*.*)|*.*";
-			lfd.FilterIndex = 1;
-			lfd.Title = "Open config file";
-			lfd.RestoreDirectory = true;
-			lfd.InitialDirectory = last_path;
-			lfd.Multiselect = false;
-			if (lfd.ShowDialog() == DialogResult.OK)
-			{
 				last_path = Path.GetDirectoryName(lfd.FileName);
 				this.save_registry_value(last_path);
 				this.m_ServerMgr.load(lfd.FileName);
+
+				foreach (ServerInfo si in this.m_ServerMgr.m_server)
+				{
+					this.add_server(si, false);
+				}
+			}
+			catch (Exception ex)
+			{
+				this.PrintOut(ex.Message);
 			}
 		}
 

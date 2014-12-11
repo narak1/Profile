@@ -5,9 +5,10 @@ using System.Text;
 
 namespace ARAInst
 {
-	class Argument
+	public class Argument
 	{
 		public enum Type { None, Char, UChar, Bool, Short, Integer, Long, Single, Double, Binary };
+		static int[] type_size = { 0, 1, 1, 2, 2, 4, 4, 8, 1 };
 		public Type m_type = Type.None;
 		public short m_length = 0;
 		public byte[] m_value = null;
@@ -88,6 +89,23 @@ namespace ARAInst
 			Buffer.BlockCopy(this.m_value, 0, arr, idx, this.m_value.Length);
 
 			return arr;
+		}
+
+		public int decode(byte[] buff, int idx)
+		{
+			//type length value
+			this.m_type = (Argument.Type)BitConverter.ToInt16(buff, idx);
+			idx += 2;
+			this.m_length = BitConverter.ToInt16(buff, idx);
+			idx += 2;
+			this.m_size = 2 + 2 + (this.m_length / 4 + 1) * 4;		// data type 
+
+			int data_len = this.m_length * Argument.type_size[(int)this.m_type];
+			this.m_value = new byte[data_len];
+			Buffer.BlockCopy(buff, idx, this.m_value, 0, data_len);
+
+			idx += this.m_size;
+			return idx;
 		}
 	}
 }

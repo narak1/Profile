@@ -2,7 +2,7 @@
 #include "SimPacket.h"
 #include "ErrorCode.h"
 
-//	enum Command { Add, Del, Read, Write, Save, Load, Remove, Error, NoCmd };
+//	enum Command { Add, Del, Read, Write, Save, Load, Remove, Error, MaxCmd };
 const char* SimPacket::m_strCmd[] = { "Add", "Del", "Read", "Write", "Save", "Load", "Remove", "Error", "" };
 
 
@@ -31,7 +31,7 @@ ErrorCode SimPacket::Parse(void)
 		}
 	}
 
-	if( this->m_nCmd == this->NoCmd ) {
+	if( this->m_nCmd == this->MaxCmd ) {
 		return ec.set(true, ErrorCode::Packet, 5);
 	}
 

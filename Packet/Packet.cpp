@@ -271,10 +271,14 @@ void Packet::Encode(void)
 	//
 	// Body
 	//
+	PRINTLOG((Logger::DebugLog, "m_nArg=%d", this->m_nArg));
+
 	* (int *) ptr = this->m_nArg;
 	ptr += 4;
+	PRINTLOG((Logger::DebugLog, "0 ptr=%p", ptr));
 	for( int i=0 ; i<this->m_nArg ; i++ ) {
 		ptr = this->m_pArg[i].encode(ptr);
+		PRINTLOG((Logger::DebugLog, "%d ptr=%p", i+1, ptr));
 	}
 
 	this->m_nSendNum = ptr - this->m_pSendBuf;
@@ -288,5 +292,29 @@ void Packet::AddArg(void)
 {
 	Argument *arg = this->m_pArg + this->m_nArg;
 	arg->set(arg->None, 0);
+	this->m_nArg++;
+}
+
+
+void Packet::AddArg(int nVal)
+{
+	Argument *arg = this->m_pArg + this->m_nArg;
+	arg->set(arg->None, 1, this->m_mm.alloc(nVal));
+	this->m_nArg++;
+}
+
+
+void Packet::AddArg(int* pVal)
+{
+	Argument *arg = this->m_pArg + this->m_nArg;
+	arg->set(arg->Integer, 1, pVal);
+	this->m_nArg++;
+}
+
+
+void Packet::AddArg(int arrVal[], int num)
+{
+	Argument *arg = this->m_pArg + this->m_nArg;
+	arg->set(arg->Integer, num, arrVal);
 	this->m_nArg++;
 }

@@ -28,7 +28,7 @@ namespace ARAInst
 		public int auto_save_interval = 10 * 60;	// sec
 		public int auto_save_filenum = 20;
 
-		List<ServerInfo> m_server = new List<ServerInfo>();
+		public List<ServerInfo> m_server = new List<ServerInfo>();
 
 		public bool Add(ServerInfo info)
 		{
@@ -61,17 +61,20 @@ namespace ARAInst
 
 		public void save(string file_path = null)
 		{
+			FileStream fs = null;
+			StreamWriter output = null;
+			XmlWriter xml = null;
 			try
 			{
 				if (file_path == null) file_path = this.m_config_file;
 				else this.m_config_file = file_path;
 
-				FileStream fs = new FileStream(file_path, FileMode.Create);
-				StreamWriter output = new StreamWriter(fs);
+				fs = new FileStream(file_path, FileMode.Create);
+				output = new StreamWriter(fs);
 
 				XmlWriterSettings settings = new XmlWriterSettings();
 				settings.Indent = true;
-				XmlWriter xml = XmlWriter.Create(output, settings);
+				xml = XmlWriter.Create(output, settings);
 
 				xml.WriteStartDocument();
 				xml.WriteStartElement(this.str_root);
@@ -99,31 +102,36 @@ namespace ARAInst
 
 				xml.WriteEndElement();	// root
 				xml.WriteEndDocument();
-				xml.Close();
-
-				output.Close();
-				fs.Close();
 			}
 			catch (Exception ex)
 			{
 				throw ex;
 			}
+			finally
+			{
+				if (xml != null) xml.Close();
+				if (output != null) output.Close();
+				if (fs != null) fs.Close();
+			}
 		}
 
 		public void load(string file_path = null)
 		{
+			FileStream fs = null;
+			StreamReader input = null;
+			XmlReader xml = null;
 			try
 			{
 				if (file_path == null) file_path = this.m_config_file;
 				else this.m_config_file = file_path;
 
-				FileStream fs = new FileStream(file_path, FileMode.Open);
-				StreamReader input = new StreamReader(fs);
+				fs = new FileStream(file_path, FileMode.Open);
+				input = new StreamReader(fs);
 
 				XmlReaderSettings settings = new XmlReaderSettings();
 				settings.IgnoreComments = true;
 				settings.IgnoreWhitespace = true;
-				XmlReader xml = XmlReader.Create(input, settings);
+				xml = XmlReader.Create(input, settings);
 
 				xml.Read();
 				xml.ReadStartElement(this.str_root);
@@ -150,13 +158,16 @@ namespace ARAInst
 				xml.ReadEndElement();	// SIMBridge
 
 				xml.ReadEndElement();	// root
-				xml.Close();
-				input.Close();
-				fs.Close();
 			}
 			catch (Exception ex)
 			{
 				throw ex;
+			}
+			finally
+			{
+				if (xml != null) xml.Close();
+				if (input != null) input.Close();
+				if (fs != null) fs.Close();
 			}
 		}
 

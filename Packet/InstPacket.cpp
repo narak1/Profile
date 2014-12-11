@@ -2,7 +2,7 @@
 #include "InstPacket.h"
 #include "ErrorCode.h"
 
-//	enum Command { Error, Hello, Set, Info, SimInit, SimTime, TagInit, TagDown, Send, Run, NoCmd };
+//	enum Command { Error, Hello, Set, Info, SimInit, SimTime, TagInit, TagDown, Send, Run, MaxCmd };
 const char* InstPacket::m_strCmd[] = 
 { "Error", "Hello", "Set", "Info", "SimInit", "SimTime", "TagInit", "TagDown", "Send", "Run", "" };
 
@@ -25,14 +25,15 @@ ErrorCode InstPacket::Parse(void)
 	}
 
 	// find command
-	for( int i=0 ; i<=this->Error ; i++ ) {
+	this->m_nCmd = this->MaxCmd;
+	for( int i=0 ; i<this->MaxCmd ; i++ ) {
 		if( strcmp(this->m_pCmd, this->m_strCmd[i]) == 0 ) {
 			this->m_nCmd = i;
 			break;
 		}
 	}
 
-	if( this->m_nCmd == this->NoCmd ) {
+	if( this->m_nCmd == this->MaxCmd ) {
 		return ec.set(true, ErrorCode::Packet, 5);
 	}
 

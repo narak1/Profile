@@ -7,6 +7,7 @@ class Packet;
 class SimPacket;
 class InstPacket;
 class CSIMBridgeDlg;
+class ErrorCode;
 
 class CMySock : public CAsyncSocket
 {
@@ -24,6 +25,19 @@ private:
 	InstPacket* m_Packet;
 	CSIMBridgeDlg* m_pDlg;
 	SocketManager* m_SockMgr;
+public:
+	ErrorCode CmdError(void);
+	ErrorCode CmdHello(void);
+	ErrorCode CmdSet(void);
+	ErrorCode CmdInfo(void);
+	ErrorCode CmdSimInit(void);
+	ErrorCode CmdSimTime(void);
+	ErrorCode CmdTagInit(void);
+	ErrorCode CmdTagDown(void);
+	ErrorCode CmdSend(void);
+	ErrorCode CmdRun(void);
+	void Send_Start(void);
+	void SendError(ErrorCode& ec);
 };
 
 

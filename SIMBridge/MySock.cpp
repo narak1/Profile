@@ -7,6 +7,7 @@
 #include "MySock.h"
 #include "SocketManager.h"
 
+#include "../Packet/Argument.h"
 #include "../Packet/Packet.h"
 #include "../Packet/SimPacket.h"
 #include "../Packet/InstPacket.h"
@@ -87,104 +88,73 @@ void CMySock::OnReceive(int nErrorCode)
 	int nRecv = this->Receive(buff, 1024);
 	PRINTLOG((Logger::DebugLog, "Recv Num=%d", nRecv));
 
-
 	if( nRecv == SOCKET_ERROR ) {
 		DWORD dwError = ::GetLastError();
 		PRINTOUT(("Socket Receive(,1024) Error! %08X:%s", dwError, this->m_Util->error_str(dwError)));
 	}
 	else if( nRecv == 0 ) {		// closed by peer
+		CString strPeerName;
+		UINT nPeerPort = 0;
+		BOOL flag = this->GetPeerName(strPeerName, nPeerPort);
+		if( flag == FALSE ) {
+			DWORD dwError = ::GetLastError();
+			PRINTOUT(("Socket GetPeerName(,) Error! %08X:%s", dwError, this->m_Util->error_str(dwError)));
+			PRINTOUT(("Socket Closed."));
+		}
+		else {
+			PRINTOUT(("%s:%d Socket Closed.", strPeerName, nPeerPort));
+		}
+
 		this->Close();
 	}
 	else {
 		this->m_Packet->AddRecv(buff, nRecv);
 
 		PRINTLOG((Logger::DebugLog, "m_Packet.AddRecv(,%d)", nRecv));
-		ErrorCode ec = this->m_Packet->Parse();
-		if( ec.is_error() ) {
-			// clear recv buffer
-			this->m_Packet->Clear();
 
-			PRINTOUT(("Packet Parse Error! Code=%d", ec.get_code()));
+		while(1)	// multiple message recved
+		{
+			ErrorCode ec = this->m_Packet->Parse();
+			if( ec.is_error() ) {
+				PRINTOUT(("Packet Parse Error! Code=%d", ec.get_code()));
 
-			// Error Packet Generation
-			this->m_Packet->SetArgNum(1);
-			this->m_Packet->AddArg(ec.get_error());
-
-			// encoding packet
-			//
-			this->m_Packet->Encode();
-
-			// send error
-			//
-			int nSend = 0;
-			const char *ptr = this->m_Packet->GetSend(nSend);
-			int nRet = this->Send(ptr, nSend);
-			if( nRet == SOCKET_ERROR ) {
-				DWORD dwError = ::GetLastError();
-				PRINTOUT(("Socket Send(,%d) Error! ErrorNo=%08X", nSend, dwError));
+				SendError(ec);
 			}
-			else {
-				this->m_Packet->SubSend(nRet);
-			}
-		}
-		else if( ec.is_clean() ) {
-			// processing
-			int nCmd = this->m_Packet->GetCommand();
+			else if( ec.is_clean() ) {
+				// processing
+				int nCmd = this->m_Packet->GetCommand();
 
 PRINTLOG((Logger::DebugLog, "nCmd=%d", nCmd));
 
-			int nArg = 0;
-			Argument* pArg = this->m_Packet->GetArg(nArg);
+				int nArg = 0;
+				Argument* pArg = this->m_Packet->GetArg(nArg);
 
 PRINTLOG((Logger::DebugLog, "nArg=%d", nArg));
 
-			ErrorCode ec;
+				ErrorCode ec;
 
-PRINTLOG((Logger::DebugLog, "Result=%08X", ec.get_code()));
+			// Processing using Handler
+//	enum Command { Error, Hello, Set, Info, SimInit, SimTime, TagInit, TagDown, Send, Run, MaxCmd };
 
-			// recv packet clear
-			// clear argument
-			this->m_Packet->Clear();
+				switch( nCmd ) {
+				case InstPacket::Error:		ec = this->CmdError();	break;
+				case InstPacket::Hello:		ec = this->CmdHello();	break;
+				case InstPacket::Info:		ec = this->CmdInfo();	break;
+				case InstPacket::SimInit:	ec = this->CmdSimInit();	break;
+				case InstPacket::SimTime:	ec = this->CmdSimTime();	break;
+				case InstPacket::TagInit:	ec = this->CmdTagInit();	break;
+				case InstPacket::TagDown:	ec = this->CmdTagDown();	break;
+				case InstPacket::Send:		ec = this->CmdSend();	break;
+				case InstPacket::Run:		ec = this->CmdRun();	break;
+				default: ec.set(true, 0, 0, "Unknown command");
+				}
+				PRINTLOG((Logger::DebugLog, "Result=%08X", ec.get_code()));
 
-			// make reply
-			// make argument
-			if( ec.is_clean() ) {
-				this->m_Packet->SetRequestType(Packet::ForResponse);
-				this->m_Packet->SetCommand(nCmd);
-				this->m_Packet->SetArgNum(1);
-				this->m_Packet->AddArg();	// None
-			}
-			else if( ec.is_error() ) {
-				this->m_Packet->SetRequestType(Packet::SendOnly);
-				this->m_Packet->SetCommand(SimPacket::Error);
-				this->m_Packet->SetArgNum(1);
-				this->m_Packet->AddArg(ec.get_error());
-			}
-			else {
-				// what is this?
-			}
-
-PRINTLOG((Logger::DebugLog, "Reply Arg Set=%08X", this->m_Packet->GetCommand() ));
-
-			// encoding
-			this->m_Packet->Encode();
-
-PRINTLOG((Logger::DebugLog, "this->m_Packet.Encode() Finish"));
-
-			// get send buffer
-			// send(buf, num);
-			int nSend = 0;
-			const char *ptr = this->m_Packet->GetSend(nSend);
-PRINTLOG((Logger::DebugLog, "Buffer=%p, nSend=%d", ptr, nSend));
-
-			int nRet = this->Send(ptr, nSend);
-			if( nRet == SOCKET_ERROR ) {
-				DWORD dwError = ::GetLastError();
-				PRINTOUT(("Socket Send(,%d) Error! ErrorNo=%08X", nSend, dwError));
+				this->m_Packet->Clear();	// recv packet clear
 			}
 			else {
-PRINTLOG((Logger::DebugLog, "nRet=%d", nRet));
-				this->m_Packet->SubSend(nRet);
+				// not complete packet ==> end loop
+				break;
 			}
 		}
 	}
@@ -213,4 +183,120 @@ void CMySock::OnSend(int nErrorCode)
 	}
 
 	CAsyncSocket::OnSend(nErrorCode);
+}
+
+
+ErrorCode CMySock::CmdError(void)
+{
+	return ErrorCode();
+}
+
+
+ErrorCode CMySock::CmdHello(void)
+{
+	PRINTLOG((Logger::DebugLog, "CMySock::CmdHello(void)"));
+
+	// who?
+	// SocketManager node name setting
+	int nArg = 0;
+	Argument *pArg = this->m_Packet->GetArg(nArg);
+	const char* node_name = (const char*) pArg->get_value();
+
+	PRINTLOG((Logger::DebugLog, "From Node Name=[%s]\n", node_name));
+
+	// Send NodeName / ServerType / Priority
+	//
+	this->m_Packet->Clear();
+	this->m_Packet->SetRequestType(Packet::ForResponse);
+	this->m_Packet->SetCommand(InstPacket::Hello);
+	this->m_Packet->SetArgNum(3);
+	this->m_Packet->AddArg(this->m_pDlg->m_strHostname);	// Node Name
+	this->m_Packet->AddArg(this->m_pDlg->m_strServerType);
+	this->m_Packet->AddArg(this->m_pDlg->m_nPriority);
+
+	this->Send_Start();
+
+	return ErrorCode();
+}
+
+
+ErrorCode CMySock::CmdSet(void)
+{
+	return ErrorCode();
+}
+
+
+ErrorCode CMySock::CmdInfo(void)
+{
+	return ErrorCode();
+}
+
+
+ErrorCode CMySock::CmdSimInit(void)
+{
+	return ErrorCode();
+}
+
+
+ErrorCode CMySock::CmdSimTime(void)
+{
+	return ErrorCode();
+}
+
+
+ErrorCode CMySock::CmdTagInit(void)
+{
+	return ErrorCode();
+}
+
+
+ErrorCode CMySock::CmdTagDown(void)
+{
+	return ErrorCode();
+}
+
+
+ErrorCode CMySock::CmdSend(void)
+{
+	return ErrorCode();
+}
+
+
+ErrorCode CMySock::CmdRun(void)
+{
+	return ErrorCode();
+}
+
+
+void CMySock::Send_Start(void)
+{
+	// encoding packet
+	//
+	this->m_Packet->Encode();
+
+	// send packet
+	//
+	int nSend = 0;
+	const char *ptr = this->m_Packet->GetSend(nSend);
+	int nRet = this->Send(ptr, nSend);
+	if( nRet == SOCKET_ERROR ) {
+		DWORD dwError = ::GetLastError();
+		PRINTOUT(("Socket Send(,%d) Error! ErrorNo=%08X", nSend, dwError));
+	}
+	else {
+		this->m_Packet->SubSend(nRet);
+	}
+}
+
+
+void CMySock::SendError(ErrorCode& ec)
+{
+	// clear recv buffer
+	this->m_Packet->Clear();
+
+	// Error Packet Generation
+	this->m_Packet->SetArgNum(1);
+	this->m_Packet->AddArg(ec.get_error());
+
+	this->Send_Start();
 }
